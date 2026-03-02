@@ -76,7 +76,7 @@ async function deleteMessage(id) {
 
 // ── MAP STAGES ────────────────────────────────────────────────────────────────
 const STAGES = [
-  { id: 0, name: "Tidal Pool",      emoji: "🌊", req: 0,  desc: "Your journey begins..." },
+  { id: 0, name: "Tidal Pool",      emoji: "🌊", req: 0,  desc: "Complete tasks to start your adventure..." },
   { id: 1, name: "Sandy Shore",     emoji: "🏖️", req: 3,  desc: "The sand feels warm!" },
   { id: 2, name: "Kelp Forest",     emoji: "🌿", req: 8,  desc: "Getting adventurous!" },
   { id: 3, name: "Coral Reef",      emoji: "🪸", req: 15, desc: "Colourful and alive!" },
@@ -300,16 +300,22 @@ function Mermaid({ size = 56 }) {
 
 // ── CREATURE CONFIG ───────────────────────────────────────────────────────────
 const CREATURES = [
-  { id: "crab",    emoji: "🦀", name: "Crab" },
-  { id: "dolphin", emoji: "🐬", name: "Dolphin" },
-  { id: "octopus", emoji: "🐙", name: "Octopus" },
-  { id: "mermaid", emoji: "🧜", name: "Mermaid" },
+  { id: "crab",     emoji: "🦀", name: "Crab",     unlockReq: 0  },
+  { id: "dolphin",  emoji: "🐬", name: "Dolphin",  unlockReq: 0  },
+  { id: "octopus",  emoji: "🐙", name: "Octopus",  unlockReq: 0  },
+  { id: "mermaid",  emoji: "🧜", name: "Mermaid",  unlockReq: 0  },
+  { id: "turtle",   emoji: "🐢", name: "Turtle",   unlockReq: 8  },
+  { id: "shark",    emoji: "🦈", name: "Shark",    unlockReq: 15 },
+  { id: "whale",    emoji: "🐋", name: "Whale",    unlockReq: 25 },
 ];
 
 function CreatureIcon({ id, size = 56, smiling = false, animate = false }) {
   if (id === "dolphin") return <Dolphin size={size}/>;
   if (id === "octopus") return <Octopus size={size}/>;
   if (id === "mermaid") return <Mermaid size={size}/>;
+  // Unlockable creatures use emoji
+  const unlockable = CREATURES.find(c => c.id === id && c.unlockReq > 0);
+  if (unlockable) return <div style={{ fontSize: size * 0.7, lineHeight: 1, display:"flex", alignItems:"center", justifyContent:"center", width:size, height:size }}>{unlockable.emoji}</div>;
   return <Crab size={size} smiling={smiling} animate={animate}/>;
 }
 
@@ -336,7 +342,11 @@ export default function App() {
   const [openCat, setOpenCat]         = useState(null);
   const [firstVisit, setFirstVisit]   = useState(false);
   const [myCreature, setMyCreature]   = useState(null);
+  const [labelIdx, setLabelIdx]       = useState(0);
   const toastRef = useRef();
+
+  const CHEST_LABELS = ["Cast a net","Find a pearl","Surface an idea","Catch a new task","Add to the hold","New task","Drop a spark","Stow an idea"];
+  const rotateLabel = () => setLabelIdx(i => (i + 1) % CHEST_LABELS.length);
 
   const showToast = (msg) => {
     setToast({ msg, visible:true });
@@ -584,7 +594,7 @@ export default function App() {
           Choose your sea creature to get started.
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, width:"100%", maxWidth:340 }}>
-          {CREATURES.map(c => (
+          {CREATURES.filter(c => c.unlockReq === 0).map(c => (
             <button key={c.id} onClick={() => pickCreature(c.id)}
               style={{ background:"rgba(255,255,255,0.12)", border:"2px solid rgba(255,255,255,0.25)", borderRadius:20, padding:"24px 16px", display:"flex", flexDirection:"column", alignItems:"center", gap:10, cursor:"pointer", transition:"all .2s" }}
               onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.22)"}
@@ -596,6 +606,9 @@ export default function App() {
               <div style={{ color:"#fff", fontWeight:800, fontSize:15, fontFamily:"'Fredoka',sans-serif" }}>{c.name}</div>
             </button>
           ))}
+        </div>
+        <div style={{ color:"rgba(255,255,255,0.5)", fontSize:12, marginTop:20, textAlign:"center" }}>
+          More creatures unlock as you complete tasks! 🐢🦈🐋
         </div>
       </div>
     </>
@@ -614,7 +627,7 @@ export default function App() {
             <div style={s.tagline}>Navigate your day, one island at a time</div>
           </div>
           <div style={s.tabs}>
-            {[["chest","🪙 Chest"],["map","🗺️ Map"],["bounty",`⚓ Bounty${incoming.length?` (${incoming.length})`:""}`]].map(([k,l])=>(
+            {[["chest","🐚 Treasure Chest"],["map","🗺️ Map"],["bounty",`🌊 Teamwork${incoming.length?` (${incoming.length})`:""}`]].map(([k,l])=>(
               <button key={k} style={s.tab(tab===k)} onClick={()=>setTab(k)}>{l}</button>
             ))}
           </div>
@@ -633,7 +646,6 @@ export default function App() {
               <div style={{ ...s.adventureCard, textAlign:"center" }}>
                 <div style={{ animation: justLeveled ? "bobFast .4s 4" : "bob 2.2s infinite ease-in-out", display:"inline-block", marginBottom:10 }}>
                   <CreatureIcon id={myCreature} size={84} animate={justLeveled} smiling={justSmiled}/>
-                </div>
                 </div>
                 <div style={{ fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:22, color:C.navText, marginBottom:3 }}>{stage.emoji} {stage.name}</div>
                 <div style={{ fontSize:13, color:C.muted, marginBottom:14 }}>{stage.desc}</div>
@@ -654,9 +666,302 @@ export default function App() {
                 ) : (
                   <div style={{ fontSize:14, color:C.gold, fontWeight:800 }}>🏆 You've reached the end — legend!</div>
                 )}
+              </div>
+
+              {/* Creature switcher */}
+              <div style={s.card}>
+                <span style={s.label}>Your crew member</span>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:10 }}>
+                  {CREATURES.map(c => {
+                    const unlocked = totalDone >= c.unlockReq;
+                    const active = myCreature === c.id;
+                    return (
+                      <button key={c.id} onClick={() => unlocked && pickCreature(c.id)}
+                        style={{ background:active?C.coral+"22":"transparent", border:`2px solid ${active?C.coral:unlocked?"#B2DFDB":"#ddd"}`, borderRadius:14, padding:"10px 6px", display:"flex", flexDirection:"column", alignItems:"center", gap:5, cursor:unlocked?"pointer":"default", opacity:unlocked?1:.45, transition:"all .2s" }}
+                      >
+                        <CreatureIcon id={c.id} size={36} smiling={active}/>
+                        <div style={{ fontSize:10, fontWeight:800, color:active?C.coral:C.navText }}>{c.name}</div>
+                        {!unlocked && <div style={{ fontSize:9, color:C.muted, fontWeight:700 }}>🔒 {c.unlockReq}</div>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={s.card}>
+                <span style={s.label}>Adventure Map</span>
+                {STAGES.map((st, i) => {
+                  const unlocked = totalDone >= st.req;
+                  const current  = st.id === stage.id;
+                  return (
+                    <div key={st.id} style={{ display:"flex", alignItems:"center", gap:13, padding:"11px 0", borderBottom:i<STAGES.length-1?`1px solid ${C.cardBorder}`:"none" }}>
+                      <div style={{ width:28, height:28, borderRadius:"50%", background:current?C.coral:unlocked?C.accent2+"28":"#E0F7FA", border:`2.5px solid ${current?C.coral:unlocked?C.accent2:C.inputBorder}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900, color:current?"#fff":unlocked?C.accent2:C.muted, flexShrink:0, animation:current?"pulse 1.8s infinite":"none" }}>
+                        {current?"🦀":unlocked?"✓":"🔒"}
+                      </div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:800, fontSize:14, color:unlocked?C.navText:C.muted }}>{st.emoji} {st.name}</div>
+                        <div style={{ fontSize:11, color:C.muted, marginTop:1 }}>{st.req===0?"Starting point":`Unlocks at ${st.req} tasks`}</div>
+                      </div>
+                      {current && <div style={{ fontSize:11, background:C.coral+"20", color:C.coral, padding:"4px 12px", borderRadius:50, fontWeight:800, whiteSpace:"nowrap" }}>You are here!</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* ══ CHEST ════════════════════════════════════════════════════════ */}
+          {tab === "chest" && (
+            <>
+              {/* Creature peeks in from top right */}
+              <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:-8, marginRight:8 }}>
+                <div style={{ animation:"bob 2.2s infinite ease-in-out" }}>
+                  <CreatureIcon id={myCreature} size={44} smiling={justSmiled}/>
+                </div>
+              </div>
+              {firstVisit && ideas.length === 0 && (
+                <div style={{ background:"rgba(255,255,255,0.14)", borderRadius:18, padding:"16px 20px", marginBottom:14, textAlign:"center", border:"1.5px dashed rgba(255,255,255,0.4)", animation:"popIn .4s ease" }}>
+                  <div style={{ animation:"bob 2.2s infinite ease-in-out", display:"inline-block", marginBottom:8 }}>
+                    <CreatureIcon id={myCreature} size={52} smiling={true}/>
+                  </div>
+                  <div style={{ color:"#fff", fontSize:13.5, fontWeight:700, lineHeight:1.65 }}>
+                    Welcome aboard! 🌊 💪<br/>
+                    <span style={{ fontWeight:500, opacity:.85 }}>This is your personal hold for every spark and task you find. Organize your loot and turn your ideas into reality.</span>
+                  </div>
+                </div>
+              )}
+
+              <div style={s.card}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+                  <span style={s.label}>{CHEST_LABELS[labelIdx]}</span>
+                  <button onClick={rotateLabel} style={{ background:"none", border:"none", fontSize:18, cursor:"pointer", opacity:.6 }} title="Change prompt">🔀</button>
+                </div>
+                <textarea style={s.textarea} placeholder="A task, spark, goal, or random thought..." value={newIdea} onChange={e=>setNewIdea(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))addIdea();}}/>
+                <button style={{ ...s.btn(), opacity:newIdea.trim()?1:.42 }} onClick={addIdea} disabled={!newIdea.trim()}>🐚 Add to Treasure Chest</button>
+              </div>
+
+              {/* Shuffle section — inline below add */}
+              <div style={{ background:"rgba(255,255,255,0.1)", borderRadius:20, padding:"18px 20px", marginBottom:14, border:"1.5px solid rgba(255,255,255,0.18)" }}>
+                <div style={{ fontSize:11, color:"rgba(255,255,255,0.7)", letterSpacing:2, textTransform:"uppercase", fontWeight:800, marginBottom:10 }}>Pick your next quest</div>
+                {shuffled ? (
+                  <div style={{ fontFamily:"'Fredoka',sans-serif", fontSize:20, fontWeight:600, lineHeight:1.45, color:"#fff", marginBottom:14, animation:"popIn .35s ease" }}>
+                    "{shuffled.text}"
+                  </div>
+                ) : (
+                  <div style={{ color:"rgba(255,255,255,0.6)", fontSize:13, fontWeight:600, lineHeight:1.6, marginBottom:14 }}>
+                    {activeCnt === 0 ? "No loot yet — add something above!" : `${activeCnt} treasure${activeCnt!==1?"s":""} in your hold`}
+                  </div>
+                )}
+                <button style={{ ...s.btn(C.coral), marginTop:0, marginBottom: shuffled ? 10 : 0, opacity:activeCnt?1:.4 }} onClick={doShuffle} disabled={!activeCnt}>
+                  🎲 Shuffle
+                </button>
+                {shuffled && (
+                  <div style={s.row}>
+                    <button style={{ ...s.btn(C.accent2), flex:1, marginTop:0 }} onClick={()=>{ toggleDone(shuffled.id); setShuffled(null); }}>✓ Mark Done</button>
+                    <button style={{ ...s.btn(C.inputBg, C.muted), flex:1, marginTop:0, boxShadow:"none", border:`1.5px solid ${C.inputBorder}` }} onClick={doShuffle}>Skip →</button>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => { setShowSuggestions(!showSuggestions); setOpenCat(null); }}
+                style={{ width:"100%", marginBottom:14, padding:"13px 16px", background:showSuggestions?C.inputBg:`linear-gradient(130deg, #00897B, #26C6DA)`, border:showSuggestions?`1.5px solid ${C.inputBorder}`:"none", borderRadius:16, color:showSuggestions?C.navText:"#fff", fontSize:14, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", gap:9, transition:"all .2s", boxShadow:showSuggestions?"none":"0 3px 12px rgba(0,137,123,0.4)" }}
+              >
+                <span style={{ fontSize:20 }}>🌊</span>
+                {showSuggestions ? "Hide suggestions ↑" : "Need a boost? Try these →"}
+              </button>
+
+              {showSuggestions && (
+                <div style={{ marginBottom:16, animation:"slideUp .25s ease" }}>
+                  <div style={{ fontSize:13, color:"rgba(255,255,255,0.8)", textAlign:"center", marginBottom:14, lineHeight:1.65, fontWeight:600 }}>
+                    Simple tasks to feel calmer and more productive.<br/>Tap any to log it straight to your chest 🦀
+                  </div>
+                  {SUGGESTIONS.map((cat) => (
+                    <div key={cat.cat} style={{ marginBottom:10 }}>
+                      <button
+                        onClick={() => setOpenCat(openCat===cat.cat ? null : cat.cat)}
+                        style={{ width:"100%", padding:"13px 16px", background:openCat===cat.cat?cat.color:C.card, border:`1.5px solid ${openCat===cat.cat?cat.color:C.cardBorder}`, borderRadius:openCat===cat.cat?"16px 16px 0 0":16, color:openCat===cat.cat?"#fff":C.navText, fontSize:14, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"space-between", transition:"all .2s", boxShadow:openCat===cat.cat?`0 2px 10px ${cat.color}44`:"none" }}
+                      >
+                        <span>{cat.cat}</span>
+                        <span style={{ fontSize:12, opacity:.75 }}>{openCat===cat.cat?"▲":"▼"}</span>
+                      </button>
+                      {openCat === cat.cat && (
+                        <div style={{ background:"#fff", border:`1.5px solid ${cat.color}44`, borderTop:"none", borderRadius:"0 0 16px 16px", overflow:"hidden" }}>
+                          {cat.tasks.map((task, i) => (
+                            <button key={i} onClick={() => addSuggestion(task)}
+                              style={{ width:"100%", padding:"12px 16px", background:"transparent", border:"none", borderBottom:i<cat.tasks.length-1?`1px solid ${cat.color}18`:"none", color:C.navText, fontSize:13.5, fontWeight:600, textAlign:"left", display:"flex", alignItems:"center", gap:11 }}
+                              onMouseEnter={e=>e.currentTarget.style.background=cat.color+"12"}
+                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                            >
+                              <span style={{ color:cat.color, fontSize:18, fontWeight:900, flexShrink:0 }}>+</span>
+                              {task}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {doneCnt > 0 && (
+                <div style={{ textAlign:"center", marginBottom:12 }}>
+                  <span style={{ background:"rgba(255,255,255,0.15)", borderRadius:50, padding:"7px 18px", fontSize:13, color:"#fff", fontWeight:800 }}>
+                    ⚓ {doneCnt} of {ideas.length} done — Kani do it!
+                  </span>
+                </div>
+              )}
+
+              {ideas.length === 0 ? (
+                <div style={s.empty}>
+                  <div style={{ animation:"bob 2s infinite ease-in-out", display:"inline-block", marginBottom:12 }}>
+                    <CreatureIcon id={myCreature} size={52}/>
+                  </div>
+                  <br/>Your chest is empty.<br/>
+                  <span style={{ opacity:.75 }}>Add your first treasure above, or try a suggestion!</span>
+                </div>
+              ) : (
+                ideas.map(idea => (
+                  <div key={idea.id} className="idea-row" style={{ ...s.item(idea.done), borderColor:idea.tag==="feel-good"&&!idea.done?C.accent2+"55":idea.done?"#B2DFDB":C.cardBorder }}>
+                    <div style={s.check(idea.done)} onClick={()=>toggleDone(idea.id)}>{idea.done&&"✓"}</div>
+                    <div style={{ flex:1 }}>
+                      <div style={s.iText(idea.done)}>{idea.text}</div>
+                      <div style={s.meta}>
+                        {idea.tag==="feel-good"&&!idea.done&&<span style={{ color:C.accent2, marginRight:6, fontWeight:700 }}>🌊 feel-good ·</span>}
+                        {idea.from_friend?`from a crew member · `:""}{idea.ts}
+                      </div>
+                    </div>
+                    <button style={s.del} onClick={()=>deleteIdea(idea.id)}>✕</button>
+                  </div>
+                ))
+              )}
+            </>
+          )}
+
+          {/* ══ BOUNTY ═══════════════════════════════════════════════════════ */}
+          {tab === "bounty" && (
+            <>
+              {/* Hero */}
+              <div style={{ ...s.adventureCard, textAlign:"center", padding:"22px 20px 18px" }}>
+                <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"center", gap:10, marginBottom:12 }}>
+                  <div style={{ animation:"bob 2.4s infinite ease-in-out" }}><Mermaid size={52}/></div>
+                  <div style={{ animation:"bob 2s infinite ease-in-out", animationDelay:".3s" }}><Crab size={58} smiling={justSmiled}/></div>
+                  <div style={{ animation:"bob 2.6s infinite ease-in-out", animationDelay:".6s" }}><Octopus size={52}/></div>
+                  <div style={{ animation:"bob 1.9s infinite ease-in-out", animationDelay:".15s" }}><Dolphin size={52}/></div>
+                </div>
+                <div style={{ fontFamily:"'Fredoka',sans-serif", fontWeight:700, fontSize:19, color:C.navText, marginBottom:6 }}>
+                  Teamwork 🌊
+                </div>
+                <div style={{ fontSize:13, color:C.muted, lineHeight:1.7 }}>
+                  Share your code so your crew can drop tasks and sparks into your hold. Keep what you like and leave the rest. A little wind in the sails goes a long way. 🌊
+                </div>
+              </div>
+
+              {/* Incoming treasures */}
+              {incoming.length > 0 && (
+                <div style={{ marginBottom:20 }}>
+                  <div style={{ fontSize:11, color:"rgba(255,255,255,0.7)", letterSpacing:2.5, textTransform:"uppercase", marginBottom:10, fontWeight:800 }}>💌 Treasures from your crew</div>
+                  {incoming.map(item => (
+                    <div key={item.id} className="idea-row" style={{ ...s.item(false), background:"#E8F5FD", borderColor:"#B3E5FC" }}>
+                      <div style={{ flex:1 }}>
+                        <div style={s.iText(false)}>{item.text}</div>
+                        <div style={s.meta}>from your crew · {item.ts}</div>
+                      </div>
+                      <div style={{ display:"flex", gap:7, flexShrink:0 }}>
+                        <button style={s.smBtn(C.accent2)} onClick={()=>acceptIncoming(item)}>+ Log</button>
+                        <button style={s.smBtn(C.danger)} onClick={()=>dismissIncoming(item)}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                  <button style={{ ...s.outline, width:"100%", marginTop:6, fontSize:12, background:"rgba(255,255,255,0.12)", color:"#fff", border:"1.5px solid rgba(255,255,255,0.25)", fontWeight:700 }} onClick={refreshIncoming}>↻ Check for new treasures</button>
+                </div>
+              )}
+
+              {/* Your code */}
+              <div style={s.card}>
+                <span style={s.label}>Your chest code</span>
+                <p style={{ fontSize:13, color:C.muted, marginBottom:16, lineHeight:1.7 }}>
+                  Give this code to your crew. They can drop motivation into your hold and you can do the same for them. Help each other out one idea at a time. 🦀
+                </p>
+                <div style={s.codeBox}>
+                  <div style={{ fontSize:10, color:C.muted, letterSpacing:3, textTransform:"uppercase", marginBottom:8, fontWeight:700 }}>Your code</div>
+                  <div style={s.codeVal}>{myCode}</div>
+                </div>
+                <button style={{ ...s.outline, width:"100%", fontSize:13, color:C.coral, borderColor:C.coral+"66", fontWeight:800 }} onClick={()=>{ navigator.clipboard?.writeText(myCode); showToast("Code copied! 📋"); }}>
+                  📋 Copy code
+                </button>
+              </div>
+
+              <div style={s.divider}>— join your crew —</div>
+
+              {/* Join a friend */}
+              <div style={s.card}>
+                <span style={s.label}>Connect to a crew member</span>
+                <div style={s.row}>
+                  <input style={s.input} placeholder="Their code" value={joinCode} maxLength={4} onChange={e=>setJoinCode(e.target.value.toUpperCase())} onKeyDown={e=>e.key==="Enter"&&joinFriend()}/>
+                  <button style={{ ...s.btn(C.coral), width:"auto", marginTop:0, padding:"12px 20px" }} onClick={joinFriend}>Connect</button>
+                </div>
+              </div>
+
+              {/* Crew list */}
+              {friendBoxes.length === 0 ? (
+                <div style={s.empty}>
+                  <div style={{ display:"flex", justifyContent:"center", gap:12, marginBottom:16 }}>
+                    <div style={{ animation:"bob 2s infinite" }}><Dolphin size={44}/></div>
+                    <div style={{ animation:"bob 2.4s infinite", animationDelay:".3s" }}><Mermaid size={44}/></div>
+                  </div>
+                  No crew members yet.<br/>
+                  <span style={{ opacity:.75 }}>Enter their code above — the ocean is better together!</span>
+                </div>
+              ) : (
+                friendBoxes.map(box => (
+                  <div key={box.code} style={s.card}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+                      {editingFriend === box.code ? (
+                        <div style={{ ...s.row, flex:1, marginRight:0 }}>
+                          <input
+                            style={{ ...s.input, letterSpacing:0, textTransform:"none", fontSize:13, flex:1 }}
+                            value={editingName}
+                            onChange={e => setEditingName(e.target.value)}
+                            onKeyDown={e => e.key === "Enter" && renameFriend(box.code, editingName)}
+                            autoFocus
+                          />
+                          <button style={{ ...s.btn(C.accent2), width:"auto", marginTop:0, padding:"10px 14px", fontSize:13 }} onClick={() => renameFriend(box.code, editingName)}>Save</button>
+                          <button style={{ ...s.btn(C.inputBg, C.muted), width:"auto", marginTop:0, padding:"10px 14px", fontSize:13, boxShadow:"none" }} onClick={() => setEditingFriend(null)}>✕</button>
+                        </div>
+                      ) : (
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%" }}>
+                          <div style={{ fontWeight:800, fontSize:15, color:C.navText }}>⚓ {box.label}</div>
+                          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                            <button style={{ ...s.smBtn(C.muted), fontSize:11 }} onClick={() => { setEditingFriend(box.code); setEditingName(box.label); }}>✏️ Rename</button>
+                            <div style={{ fontFamily:"monospace", fontSize:12, color:C.muted, background:C.inputBg, padding:"3px 10px", borderRadius:8, letterSpacing:2.5, border:`1px solid ${C.inputBorder}` }}>{box.code}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {!editingFriend && (friendTarget === box.code ? (
+                      <>
+                        <textarea style={{ ...s.textarea, minHeight:76 }} placeholder="Drop a treasure, task, or spark of wind in their sails..." value={friendIdea} onChange={e=>setFriendIdea(e.target.value)}/>
+                        <div style={s.row}>
+                          <button style={{ ...s.btn(C.coral), flex:1, marginTop:10 }} onClick={()=>sendToFriend(box.code)} disabled={!friendIdea.trim()}>💌 Send their way</button>
+                          <button style={{ ...s.btn(C.inputBg,C.muted), width:"auto", marginTop:10, padding:"14px 16px", boxShadow:"none", border:`1.5px solid ${C.inputBorder}` }} onClick={()=>{ setFriendTarget(null); setFriendIdea(""); }}>✕</button>
+                        </div>
+                      </>
+                    ) : (
+                      <button style={{ ...s.outline, width:"100%", color:C.coral, borderColor:C.coral+"55", fontWeight:800 }} onClick={()=>setFriendTarget(box.code)}>
+                        💌 Drop a treasure into their chest
+                      </button>
+                    ))}
+                  </div>
+                ))
+              )}
+            </>
+          )}
+
+        </div>
       </div>
-    </div>
-    <div style={s.toast(toast.visible)}>{toast.msg}</div>
-  </>
+
+      <div style={s.toast(toast.visible)}>{toast.msg}</div>
+    </>
   );
 }
