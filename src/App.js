@@ -12,15 +12,33 @@ async function generateUniqueCode() {
   for (let i = 0; i < 5; i++) {
     const code = generateCode();
     try {
-      const [codes, chests] = await Promise.all([
-        supabase.from("user_codes").select("code", { count: "exact", head: true }).eq("code", code),
-        supabase.from("ideas").select("id", { count: "exact", head: true }).eq("client_id", code),
-      ]);
-      if (codes.error || chests.error) return code;
-      if (!codes.count && !chests.count) return code;
+      const { count, error } = await supabase.from("user_codes").select("code", { count: "exact", head: true }).eq("code", code);
+      if (error) return code;
+      if (!count) return code;
     } catch { return code; }
   }
   return generateCode();
+}
+
+// Signs the device in anonymously (no login UI); the resulting auth.uid()
+// is what row level security checks ownership against.
+async function ensureSession() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) return session;
+    const { data, error } = await supabase.auth.signInAnonymously();
+    return error ? null : data.session;
+  } catch { return null; }
+}
+
+// Registers the share code to this account and adopts any rows saved
+// under it before auth existed. "taken" = someone else owns that code.
+async function claimChest(code) {
+  try {
+    const { error } = await supabase.rpc("claim_chest", { p_code: code });
+    if (!error) return "ok";
+    return /claimed/i.test(error.message || "") ? "taken" : "error";
+  } catch { return "error"; }
 }
 
 // ideas.id is numeric in the DB (all existing rows carry Date.now() values),
@@ -235,9 +253,21 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
+      const session = await ensureSession();
       let clientId = localStorage.getItem("kd_client_id");
       const isNew = !clientId;
       if (!clientId) { clientId = await generateUniqueCode(); localStorage.setItem("kd_client_id", clientId); setFirstVisit(true); }
+      if (session && !localStorage.getItem("kd_claimed")) {
+        let res = await claimChest(clientId);
+        for (let guard = 0; res === "taken" && guard < 5; guard++) {
+          clientId = await generateUniqueCode();
+          res = await claimChest(clientId);
+        }
+        if (res === "ok") {
+          localStorage.setItem("kd_client_id", clientId);
+          localStorage.setItem("kd_claimed", "1");
+        }
+      }
       setMyCode(clientId);
       const savedName = localStorage.getItem("kd_username") || "";
       setMyName(savedName);
