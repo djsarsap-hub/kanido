@@ -2,7 +2,32 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "./supabase";
 
 function generateCode() {
-  return Math.random().toString(36).substring(2, 6).toUpperCase();
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const buf = new Uint32Array(4);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, n => chars[n % chars.length]).join("");
+}
+
+async function generateUniqueCode() {
+  for (let i = 0; i < 5; i++) {
+    const code = generateCode();
+    try {
+      const [codes, chests] = await Promise.all([
+        supabase.from("user_codes").select("code", { count: "exact", head: true }).eq("code", code),
+        supabase.from("ideas").select("id", { count: "exact", head: true }).eq("client_id", code),
+      ]);
+      if (codes.error || chests.error) return code;
+      if (!codes.count && !chests.count) return code;
+    } catch { return code; }
+  }
+  return generateCode();
+}
+
+// ideas.id is numeric in the DB (all existing rows carry Date.now() values),
+// so ids stay numeric; the counter avoids same-millisecond collisions.
+let idCounter = 0;
+function nextId() {
+  return Date.now() * 1000 + (idCounter++ % 1000);
 }
 
 async function loadIdeas(clientId) {
@@ -30,7 +55,10 @@ async function deleteMessage(id) {
 }
 
 async function saveCode(code, username) {
-  try { await supabase.from("user_codes").upsert({ code, username: username || null }); } catch {}
+  try {
+    const { error } = await supabase.from("user_codes").upsert({ code, username: username || null });
+    return !error;
+  } catch { return false; }
 }
 
 const STAGES = [
@@ -209,7 +237,7 @@ export default function App() {
     (async () => {
       let clientId = localStorage.getItem("kd_client_id");
       const isNew = !clientId;
-      if (!clientId) { clientId = generateCode(); localStorage.setItem("kd_client_id", clientId); setFirstVisit(true); }
+      if (!clientId) { clientId = await generateUniqueCode(); localStorage.setItem("kd_client_id", clientId); setFirstVisit(true); }
       setMyCode(clientId);
       const savedName = localStorage.getItem("kd_username") || "";
       setMyName(savedName);
@@ -232,25 +260,36 @@ export default function App() {
     const trimmed = name.trim();
     setMyName(trimmed);
     localStorage.setItem("kd_username", trimmed);
-    await saveCode(myCode, trimmed);
+    const ok = await saveCode(myCode, trimmed);
     setEditingMyName(false);
-    showToast("Name saved! 🌊");
+    showToast(ok ? "Name saved! 🌊" : "Couldn't save — check your connection 🌊");
   };
 
   const addIdea = async () => {
     if (!newIdea.trim()) return;
-    const newItem = { id: Date.now(), text: newIdea.trim(), done: false, ts: new Date().toLocaleDateString() };
+    const newItem = { id: nextId(), text: newIdea.trim(), done: false, ts: new Date().toLocaleDateString() };
     setIdeas(prev => [newItem, ...prev]);
-    await supabase.from("ideas").insert({ ...newItem, client_id: myCode });
+    const { error } = await supabase.from("ideas").insert({ ...newItem, client_id: myCode });
+    if (error) {
+      setIdeas(prev => prev.filter(i => i.id !== newItem.id));
+      showToast("Couldn't save — check your connection 🌊");
+      return;
+    }
     setNewIdea(""); setFirstVisit(false);
     showToast("✨ Added to your chest!");
   };
 
   const toggleDone = async (id) => {
     const idea = ideas.find(i=>i.id===id);
-    const wasUndone = !idea?.done;
+    if (!idea) return;
+    const wasUndone = !idea.done;
     setIdeas(prev => prev.map(i=>i.id===id?{...i,done:!i.done}:i));
-    await supabase.from("ideas").update({ done: !idea.done }).eq("id", id).eq("client_id", myCode);
+    const { error } = await supabase.from("ideas").update({ done: !idea.done }).eq("id", id).eq("client_id", myCode);
+    if (error) {
+      setIdeas(prev => prev.map(i=>i.id===id?{...i,done:idea.done}:i));
+      showToast("Couldn't save — check your connection 🌊");
+      return;
+    }
     if (wasUndone) {
       const newTotal = totalDone+1;
       const prev = getStage(totalDone), next = getStage(newTotal);
@@ -264,15 +303,26 @@ export default function App() {
   };
 
   const deleteIdea = async (id) => {
+    const prevIdeas = ideas;
     setIdeas(prev => prev.filter(i=>i.id!==id));
-    await supabase.from("ideas").delete().eq("id", id).eq("client_id", myCode);
+    const { error } = await supabase.from("ideas").delete().eq("id", id).eq("client_id", myCode);
+    if (error) {
+      setIdeas(prevIdeas);
+      showToast("Couldn't save — check your connection 🌊");
+      return;
+    }
     if (shuffled?.id===id) setShuffled(null);
   };
 
   const addSuggestion = async (text) => {
-    const newItem = { id: Date.now(), text, done: false, ts: new Date().toLocaleDateString(), tag:"feel-good" };
+    const newItem = { id: nextId(), text, done: false, ts: new Date().toLocaleDateString(), tag:"feel-good" };
     setIdeas(prev => [newItem, ...prev]);
-    await supabase.from("ideas").insert({ ...newItem, client_id: myCode });
+    const { error } = await supabase.from("ideas").insert({ ...newItem, client_id: myCode });
+    if (error) {
+      setIdeas(prev => prev.filter(i => i.id !== newItem.id));
+      showToast("Couldn't save — check your connection 🌊");
+      return;
+    }
     setShowSuggestions(false); setOpenCat(null);
     showToast("🌊 Added to your chest!");
   };
@@ -306,9 +356,14 @@ export default function App() {
   };
 
   const acceptIncoming = async (item) => {
-    const newItem = { id: Date.now(), text: item.text, done: false, ts: item.ts, from_friend: item.from_name || item.from_code };
+    const newItem = { id: nextId(), text: item.text, done: false, ts: item.ts, from_friend: item.from_name || item.from_code };
     setIdeas(prev => [newItem, ...prev]);
-    await supabase.from("ideas").insert({ ...newItem, client_id: myCode });
+    const { error } = await supabase.from("ideas").insert({ ...newItem, client_id: myCode });
+    if (error) {
+      setIdeas(prev => prev.filter(i => i.id !== newItem.id));
+      showToast("Couldn't save — check your connection 🌊");
+      return;
+    }
     await deleteMessage(item.id);
     setIncoming(prev => prev.filter(i=>i.id!==item.id));
     showToast("✨ Added to your chest!");
